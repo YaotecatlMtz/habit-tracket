@@ -1,31 +1,36 @@
-import { MongoClient, type Db } from "mongodb";
+import mongoose from "mongoose";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
+import { connectDb } from "./db";
 
 // Pattern for repository tests: a throwaway in-memory Mongo per test file, emptied before each test.
 let server: MongoMemoryServer;
-let client: MongoClient;
-let db: Db;
 
 beforeAll(async () => {
   server = await MongoMemoryServer.create();
-  client = await new MongoClient(server.getUri()).connect();
-  db = client.db("test");
+  process.env.MONGODB_URI = server.getUri();
+  await connectDb();
 });
 
 afterAll(async () => {
-  await client.close();
+  await mongoose.disconnect();
   await server.stop();
 });
 
 beforeEach(async () => {
-  await db.dropDatabase();
+  await mongoose.connection.dropDatabase();
 });
 
+const Note = mongoose.model("Note", new mongoose.Schema({ text: { type: String, required: true } }));
+
 it("stores and reads back a document", async () => {
-  await db.collection("habits").insertOne({ name: "Read 10 pages" });
+  await Note.create({ text: "hello" });
 
-  const habit = await db.collection("habits").findOne({ name: "Read 10 pages" });
+  const note = await Note.findOne({ text: "hello" });
 
-  expect(habit?.name).toBe("Read 10 pages");
+  expect(note?.text).toBe("hello");
+});
+
+it("rejects a document that breaks the schema", async () => {
+  await expect(Note.create({})).rejects.toThrow(/text.*required/);
 });

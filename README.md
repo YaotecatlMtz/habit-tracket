@@ -1,6 +1,6 @@
 # Habit Tracker
 
-A TDD practice project with Next.js, React, TypeScript and MongoDB. You create habits, check them off each day, and see your streaks and a calendar heatmap.
+A TDD practice project with Next.js, React, TypeScript and MongoDB (via Mongoose). You create habits, check them off each day, and see your streaks and a calendar heatmap.
 
 ## Commands
 
@@ -18,13 +18,16 @@ npm run e2e                  # Playwright (starts the dev server for you)
 
 | Layer | File pattern | Runs in | Sample |
 |---|---|---|---|
-| Domain logic (pure functions) | `src/**/*.test.ts` | Node | `src/domain/example.test.ts` |
+| Domain logic (pure functions) | `src/**/*.test.ts` | Node | none yet |
 | Repositories (Mongo) | `src/**/*.test.ts` | Node + in-memory Mongo | `src/lib/db.test.ts` |
-| Components | `src/**/*.test.tsx` | jsdom + React Testing Library | `src/app/page.test.tsx` |
-| End-to-end | `e2e/*.spec.ts` | Real browser | `e2e/home.spec.ts` |
+| Components | `src/**/*.test.tsx` | jsdom + React Testing Library | none yet |
+| End-to-end | `e2e/*.spec.ts` | Real browser | none yet |
 
 `.ts` vs `.tsx` decides the environment (see `vitest.config.mts`).
-Repository functions should take a `Db` as a parameter, so tests can pass the in-memory one and the app can pass `await getDb()` from `src/lib/db.ts`.
+Mongoose models use one shared connection. The app calls `await connectDb()` from `src/lib/db.ts` before querying; tests point `MONGODB_URI` at the in-memory server first (see `src/lib/db.test.ts`).
+Define models as `mongoose.models.Habit ?? mongoose.model("Habit", schema)`, or Next.js hot reload throws "Cannot overwrite model once compiled".
+
+`src/app` doesn't exist yet, so `npm run dev` and `npm run e2e` fail until you create `src/app/layout.tsx` and `src/app/page.tsx` (Phase 4).
 
 ## TDD roadmap
 

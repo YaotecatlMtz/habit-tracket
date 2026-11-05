@@ -12,7 +12,7 @@
     "e2e": "playwright test"
   },
   "dependencies": {
-    "mongodb": "^7.8.0",
+    "mongoose": "^9.12.0",
     "next": "16.4.5",
     "react": "19.3.0",
     "react-dom": "19.3.0"
