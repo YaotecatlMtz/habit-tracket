@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: { tsconfigPaths: true },
   test: {
+    reporters: ["verbose"], // one line per test, with console.log output
     // *.test.ts runs in Node (domain logic, Mongo); *.test.tsx runs in a fake browser (components).
     projects: [
       {
