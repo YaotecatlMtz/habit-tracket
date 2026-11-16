@@ -18,8 +18,14 @@ describe("isDue", () => {
 describe("isDue with several days", () => {
   it("is due on any listed day and not on the others", () => {
     const schedule: Schedule = { kind: "weekdays", days: [1, 3, 5] };
-    expect(["2026-11-09", "2026-11-11", "2026-11-13"].map((d) => isDue(schedule, d))).toEqual([true, true, true]);
-    expect(["2026-11-08", "2026-11-10", "2026-11-12", "2026-11-14"].map((d) => isDue(schedule, d))).toEqual([false, false, false, false]);
+    expect(
+      ["2026-11-09", "2026-11-11", "2026-11-13"].map((d) => isDue(schedule, d)),
+    ).toEqual([true, true, true]);
+    expect(
+      ["2026-11-08", "2026-11-10", "2026-11-12", "2026-11-14"].map((d) =>
+        isDue(schedule, d),
+      ),
+    ).toEqual([false, false, false, false]);
   });
 });
 
@@ -53,27 +59,40 @@ describe("validateSchedule", () => {
   });
 
   it("Validate faulty scenarios for perweek-times", () => {
-    expect(() => validateSchedule(bad({ kind: "perWeek", times: "3" }))).toThrow(
-      Error("Times must be an integer"),
-    );
+    expect(() =>
+      validateSchedule(bad({ kind: "perWeek", times: "3" })),
+    ).toThrow(Error("Times must be an integer"));
     expect(() => validateSchedule(bad({ kind: "perWeek", times: [] }))).toThrow(
       Error("Times must be an integer"),
     );
   });
 
   it("accepts the limits of times and days", () => {
-    for (const times of [1, 7]) expect(() => validateSchedule({ kind: "perWeek", times })).not.toThrow();
-    expect(() => validateSchedule({ kind: "weekdays", days: [0, 6] })).not.toThrow();
+    for (const times of [1, 7])
+      expect(() => validateSchedule({ kind: "perWeek", times })).not.toThrow();
+    expect(() =>
+      validateSchedule({ kind: "weekdays", days: [0, 6] }),
+    ).not.toThrow();
   });
 
   it("rejects times just outside the limits and non-integers", () => {
     for (const times of [8, -1, 2.5, NaN]) {
-      expect(() => validateSchedule({ kind: "perWeek", times })).toThrow(/Times must be|out of range/);
+      expect(() => validateSchedule({ kind: "perWeek", times })).toThrow(
+        /Times must be|out of range/,
+      );
     }
   });
 
+  it("accepts duplicate days, which are harmless", () => {
+    expect(() =>
+      validateSchedule({ kind: "weekdays", days: [1, 1, 3] }),
+    ).not.toThrow();
+  });
+
   it("rejects a fractional day", () => {
-    expect(() => validateSchedule({ kind: "weekdays", days: [1, 1.5] })).toThrow("Day is out of range please verify");
+    expect(() =>
+      validateSchedule({ kind: "weekdays", days: [1, 1.5] }),
+    ).toThrow("Day is out of range please verify");
   });
 
   it("Validates wrong combinations for kind-days-times", () => {
@@ -90,5 +109,4 @@ describe("validateSchedule", () => {
       Error("times is out of range please verify"),
     );
   });
-
 });

@@ -203,6 +203,37 @@ describe("longestStreak", () => {
     expect(longestStreak(done, three)).toBe(2);
   });
 
+  it("is 0 when no perWeek week met the goal", () => {
+    expect(
+      longestStreak(["2026-11-02", "2026-11-03", "2026-11-09"], three),
+    ).toBe(0);
+  });
+
+  it("ignores completions on non-due days (weekdays)", () => {
+    // Tue, Thu, Sat are not due for mwf
+    expect(longestStreak(["2026-11-03", "2026-11-05", "2026-11-07"], mwf)).toBe(
+      0,
+    );
+    expect(longestStreak(["2026-11-02", "2026-11-03", "2026-11-04"], mwf)).toBe(
+      2,
+    );
+  });
+
+  it("counts consecutive perWeek weeks across a year boundary", () => {
+    const done = [
+      "2026-12-21",
+      "2026-12-22",
+      "2026-12-23",
+      "2026-12-28",
+      "2026-12-29",
+      "2026-12-30",
+      "2027-01-04",
+      "2027-01-05",
+      "2027-01-06",
+    ];
+    expect(longestStreak(done, three)).toBe(3);
+  });
+
   it("is never lower than the current streak", () => {
     const done = ["2026-11-02", "2026-11-04", "2026-11-06"];
     expect(longestStreak(done, mwf)).toBeGreaterThanOrEqual(

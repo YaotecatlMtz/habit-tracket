@@ -176,6 +176,11 @@ describe("monthSummary, shape", () => {
     expect(monthSummary([], [], nov)).toHaveLength(30);
   });
 
+  it("has 28 days in February 2026 and 29 in 2028", () => {
+    expect(monthSummary([], [], "2026-02")).toHaveLength(28);
+    expect(monthSummary([], [], "2028-02")).toHaveLength(29);
+  });
+
   it("lists consecutive days from the first to the last", () => {
     const days = monthSummary([], [], nov).map((e: DaySummary) => e.day);
     expect(days[0]).toBe("2026-11-01");

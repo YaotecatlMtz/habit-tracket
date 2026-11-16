@@ -3,17 +3,27 @@ import { toDayKey, weekday, addDays, weekStart } from "./dates";
 
 describe("toDayKey", () => {
   it("formats an instant as YYYY-MM-DD", () => {
-    expect(toDayKey(new Date("2026-11-03T03:00:00Z"), "UTC")).toBe("2026-11-03");
-    expect(toDayKey(new Date("1900-11-06T03:00:00Z"), "UTC")).toBe("1900-11-06");
-    expect(toDayKey(new Date("2026-01-05T12:00:00Z"), "UTC")).toBe("2026-01-05");
-    expect(toDayKey(new Date("2024-02-29T12:00:00Z"), "UTC")).toBe("2024-02-29");
+    expect(toDayKey(new Date("2026-11-03T03:00:00Z"), "UTC")).toBe(
+      "2026-11-03",
+    );
+    expect(toDayKey(new Date("1900-11-06T03:00:00Z"), "UTC")).toBe(
+      "1900-11-06",
+    );
+    expect(toDayKey(new Date("2026-01-05T12:00:00Z"), "UTC")).toBe(
+      "2026-01-05",
+    );
+    expect(toDayKey(new Date("2024-02-29T12:00:00Z"), "UTC")).toBe(
+      "2024-02-29",
+    );
   });
 
   it("uses the day in the given time zone, not the UTC day", () => {
     const instant = new Date("2026-11-06T03:00:00Z"); // 21:00 on 5 Nov in Mexico City
     expect(toDayKey(instant, "America/Mexico_City")).toBe("2026-11-05");
     expect(toDayKey(instant, "UTC")).toBe("2026-11-06");
-    expect(toDayKey(new Date("2026-11-05T23:30:00Z"), "Europe/Madrid")).toBe("2026-11-06");
+    expect(toDayKey(new Date("2026-11-05T23:30:00Z"), "Europe/Madrid")).toBe(
+      "2026-11-06",
+    );
   });
 
   it("throws on an invalid Date or time zone", () => {
@@ -59,7 +69,8 @@ describe("addDays", () => {
 
 describe("weekStart", () => {
   it("returns the same Monday for all 7 days of a week", () => {
-    for (let d = 2; d <= 8; d++) expect(weekStart(`2026-11-0${d}`)).toBe("2026-11-02");
+    for (let d = 2; d <= 8; d++)
+      expect(weekStart(`2026-11-0${d}`)).toBe("2026-11-02");
   });
 
   it("crosses month and year boundaries", () => {
@@ -69,12 +80,16 @@ describe("weekStart", () => {
 });
 
 describe("day format", () => {
-  it.each(["ErrorTest", "2026-11-5", "2026-02-30", "2026-02-300", "2026-11-05T10:00:00Z", ""])(
-    "rejects %j",
-    (bad) => {
-      expect(() => weekday(bad)).toThrow("Invalid day");
-      expect(() => addDays(bad, 1)).toThrow("Invalid day");
-      expect(() => weekStart(bad)).toThrow("Invalid day");
-    },
-  );
+  it.each([
+    "ErrorTest",
+    "2026-11-5",
+    "2026-02-30",
+    "2026-02-300",
+    "2026-11-05T10:00:00Z",
+    "",
+  ])("rejects %j", (bad) => {
+    expect(() => weekday(bad)).toThrow("Invalid day");
+    expect(() => addDays(bad, 1)).toThrow("Invalid day");
+    expect(() => weekStart(bad)).toThrow("Invalid day");
+  });
 });

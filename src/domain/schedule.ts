@@ -9,8 +9,10 @@ export function isDue(schedule: Schedule, day: Day) {
 }
 export function validateSchedule(schedule: Schedule) {
   if (schedule.kind === "perWeek") {
-    if (!Number.isInteger(schedule.times)) throw Error("Times must be an integer");
-    if (schedule.times < 1 || schedule.times > 7) throw Error("times is out of range please verify");
+    if (!Number.isInteger(schedule.times))
+      throw Error("Times must be an integer");
+    if (schedule.times < 1 || schedule.times > 7)
+      throw Error("times is out of range please verify");
   } else if (schedule.kind === "weekdays") {
     if (!Array.isArray(schedule.days) || schedule.days.length === 0) {
       throw Error("Days must be a non-empty array");
