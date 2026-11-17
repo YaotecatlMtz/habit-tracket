@@ -236,6 +236,36 @@ describe("monthSummary, due habits", () => {
   });
 });
 
+describe("monthSummary, habit lifetime", () => {
+  it("is not due before the day it was created", () => {
+    const created = { ...daily, from: "2026-11-15" };
+    expect(entry([created], [], "2026-11-14")?.due).toBe(0);
+    expect(entry([created], [], "2026-11-15")?.due).toBe(1);
+  });
+
+  it("is not due from the day it was archived", () => {
+    const archived = { ...daily, to: "2026-11-15" };
+    expect(entry([archived], [], "2026-11-14")?.due).toBe(1);
+    expect(entry([archived], [], "2026-11-15")?.due).toBe(0);
+  });
+
+  it("keeps the completions of an archived habit", () => {
+    const archived = { ...daily, to: "2026-11-15" };
+    expect(
+      entry([archived], [done("a", "2026-11-10")], "2026-11-10")?.done,
+    ).toBe(1);
+  });
+
+  it("throws for an invalid from or to", () => {
+    expect(() =>
+      monthSummary([{ ...daily, from: "2026-13-01" }], [], nov),
+    ).toThrow(/invalid day/i);
+    expect(() => monthSummary([{ ...daily, to: "nope" }], [], nov)).toThrow(
+      /invalid day/i,
+    );
+  });
+});
+
 describe("monthSummary, done habits", () => {
   it("counts a completion on its day only", () => {
     const completions = [done("a", "2026-11-05")];

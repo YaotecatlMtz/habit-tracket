@@ -130,7 +130,28 @@ describe("createHabit, edge cases", () => {
       schedule: { ...mwf, times: 3, junk: "x" } as never,
     });
     expect(habit.schedule).toEqual(mwf);
-    expect((await getHabit(habit.id))?.schedule).toEqual(mwf);
+    expect((await getHabit("u1", habit.id))?.schedule).toEqual(mwf);
+  });
+
+  it("keeps line breaks in the description", async () => {
+    expect(
+      (await createHabit({ ...valid, description: "1. Read\n2.  Sum up" }))
+        .description,
+    ).toBe("1. Read\n2. Sum up");
+  });
+
+  it("counts an emoji as one character", async () => {
+    await expect(
+      createHabit({ ...valid, title: `${"a".repeat(255)}🧘` }),
+    ).resolves.toBeDefined();
+  });
+
+  it("stores weekdays without duplicates, in order", async () => {
+    const habit = await createHabit({
+      ...valid,
+      schedule: { kind: "weekdays", days: [5, 1, 1] },
+    });
+    expect(habit.schedule).toEqual({ kind: "weekdays", days: [1, 5] });
   });
 
   it("measures the length after normalizing", async () => {
@@ -210,44 +231,46 @@ const insertRaw = async (doc: object) =>
 describe("getHabit, main scenarios", () => {
   it("returns the habit that createHabit returned", async () => {
     const created = await createHabit(valid);
-    expect(await getHabit(created.id)).toEqual(created);
+    expect(await getHabit("u1", created.id)).toEqual(created);
   });
 
   it("returns all fields, with a string id equal to the one asked for", async () => {
     const created = await createHabit({ ...valid, description: "20 pages" });
-    const habit = await getHabit(created.id);
+    const habit = await getHabit("u1", created.id);
     expect(habit).toEqual({
       id: created.id,
       userId: "u1",
       title: "Read",
       description: "20 pages",
       schedule: mwf,
+      createdAt: created.createdAt,
     });
     expect(typeof habit?.id).toBe("string");
+    expect(habit?.createdAt).toBeInstanceOf(Date);
   });
 
   it("works for a perWeek schedule", async () => {
     const schedule: Schedule = { kind: "perWeek", times: 3 };
     const created = await createHabit({ ...valid, schedule });
-    expect((await getHabit(created.id))?.schedule).toEqual(schedule);
+    expect((await getHabit("u1", created.id))?.schedule).toEqual(schedule);
   });
 
   it("returns exactly the habit asked for when there are several", async () => {
     await createHabit({ ...valid, title: "First" });
     const second = await createHabit({ ...valid, title: "Second" });
     await createHabit({ ...valid, title: "Third" });
-    expect((await getHabit(second.id))?.title).toBe("Second");
+    expect((await getHabit("u1", second.id))?.title).toBe("Second");
   });
 
   it("returns an archived habit, with archivedAt as a Date", async () => {
     const archivedAt = new Date("2026-11-05T10:00:00Z");
     const id = await insertRaw({ archivedAt });
-    expect((await getHabit(id))?.archivedAt).toEqual(archivedAt);
+    expect((await getHabit("u1", id))?.archivedAt).toEqual(archivedAt);
   });
 
   it("leaves archivedAt out when the habit is not archived", async () => {
     const created = await createHabit(valid);
-    expect(await getHabit(created.id)).not.toHaveProperty("archivedAt");
+    expect(await getHabit("u1", created.id)).not.toHaveProperty("archivedAt");
   });
 });
 
@@ -256,7 +279,7 @@ describe("getHabit, rainy day scenarios", () => {
 
   it("returns null for a well-formed id that does not exist", async () => {
     await createHabit(valid);
-    await expect(getHabit(unknownId())).resolves.toBeNull();
+    await expect(getHabit("u1", unknownId())).resolves.toBeNull();
   });
 
   it("returns null for a habit that was removed", async () => {
@@ -264,51 +287,74 @@ describe("getHabit, rainy day scenarios", () => {
     await mongoose.connection
       .collection("habits")
       .deleteOne({ _id: new mongoose.Types.ObjectId(id) });
-    await expect(getHabit(id)).resolves.toBeNull();
+    await expect(getHabit("u1", id)).resolves.toBeNull();
   });
 
   it.each(["abc", "", "123", "not-an-id", "z".repeat(24)])(
     "throws for the malformed id %j, not null",
     async (id) => {
-      await expect(getHabit(id)).rejects.toThrow(/invalid habit id/i);
+      await expect(getHabit("u1", id)).rejects.toThrow(/invalid habit id/i);
     },
   );
 
   it.each([undefined, null, 123, {}])(
     "throws for the non-string id %j",
     async (id) => {
-      await expect(getHabit(id as never)).rejects.toThrow(/invalid habit id/i);
+      await expect(getHabit("u1", id as never)).rejects.toThrow(
+        /invalid habit id/i,
+      );
     },
   );
 
   it("does not change the database when the lookup fails", async () => {
     await createHabit(valid);
-    await getHabit(unknownId());
-    await expect(getHabit("abc")).rejects.toThrow();
+    await getHabit("u1", unknownId());
+    await expect(getHabit("u1", "abc")).rejects.toThrow();
     expect(await count()).toBe(1);
   });
 });
 
+describe("getHabit, ownership", () => {
+  it("returns null for a habit of another user", async () => {
+    const created = await createHabit(valid);
+    await expect(getHabit("u2", created.id)).resolves.toBeNull();
+  });
+
+  it.each([undefined, "", "   ", { $ne: null }])(
+    "throws for userId %j",
+    async (userId) => {
+      const created = await createHabit(valid);
+      await expect(getHabit(userId as never, created.id)).rejects.toThrow(
+        /user/i,
+      );
+    },
+  );
+});
+
 describe("getHabit, edge cases", () => {
   it("throws for a 12-character string, which Mongoose would accept as an id", async () => {
-    await expect(getHabit("abcdefghijkl")).rejects.toThrow(/invalid habit id/i);
+    await expect(getHabit("u1", "abcdefghijkl")).rejects.toThrow(
+      /invalid habit id/i,
+    );
   });
 
   it("throws for an id with surrounding spaces", async () => {
     const created = await createHabit(valid);
-    await expect(getHabit(` ${created.id} `)).rejects.toThrow(
+    await expect(getHabit("u1", ` ${created.id} `)).rejects.toThrow(
       /invalid habit id/i,
     );
   });
 
   it("accepts the id in uppercase", async () => {
     const created = await createHabit(valid);
-    expect((await getHabit(created.id.toUpperCase()))?.id).toBe(created.id);
+    expect((await getHabit("u1", created.id.toUpperCase()))?.id).toBe(
+      created.id,
+    );
   });
 
   it("returns a plain object, not a Mongoose document", async () => {
     const created = await createHabit(valid);
-    const habit = await getHabit(created.id);
+    const habit = await getHabit("u1", created.id);
     expect(Object.getPrototypeOf(habit)).toBe(Object.prototype);
     expect(habit).not.toHaveProperty("save");
     expect(Object.getPrototypeOf(habit?.schedule)).toBe(Object.prototype);
@@ -316,26 +362,28 @@ describe("getHabit, edge cases", () => {
 
   it("returns id only, with no _id or __v", async () => {
     const created = await createHabit(valid);
-    const habit = await getHabit(created.id);
+    const habit = await getHabit("u1", created.id);
     expect(habit).not.toHaveProperty("_id");
     expect(habit).not.toHaveProperty("__v");
   });
 
   it("returns equal results when read twice", async () => {
     const created = await createHabit(valid);
-    expect(await getHabit(created.id)).toEqual(await getHabit(created.id));
+    expect(await getHabit("u1", created.id)).toEqual(
+      await getHabit("u1", created.id),
+    );
   });
 
   it("does not share references between reads", async () => {
     const created = await createHabit(valid);
-    const first = (await getHabit(created.id)) as Habit;
+    const first = (await getHabit("u1", created.id)) as Habit;
     first.title = "Changed";
     (first.schedule as { days: number[] }).days.push(0);
-    expect(await getHabit(created.id)).toEqual(created);
+    expect(await getHabit("u1", created.id)).toEqual(created);
   });
 
   it("returns description '' for a habit stored without one", async () => {
     const id = await insertRaw({ description: undefined });
-    expect((await getHabit(id))?.description).toBe("");
+    expect((await getHabit("u1", id))?.description).toBe("");
   });
 });
