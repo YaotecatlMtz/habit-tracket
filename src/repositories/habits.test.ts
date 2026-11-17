@@ -115,6 +115,24 @@ describe("createHabit, edge cases", () => {
     ).rejects.toThrow(/256/);
   });
 
+  it("accepts a description of 1000 characters, rejects 1001", async () => {
+    await expect(
+      createHabit({ ...valid, description: "a".repeat(1000) }),
+    ).resolves.toBeDefined();
+    await expect(
+      createHabit({ ...valid, description: "a".repeat(1001) }),
+    ).rejects.toThrow(/1000/);
+  });
+
+  it("stores only the known schedule keys", async () => {
+    const habit = await createHabit({
+      ...valid,
+      schedule: { ...mwf, times: 3, junk: "x" } as never,
+    });
+    expect(habit.schedule).toEqual(mwf);
+    expect((await getHabit(habit.id))?.schedule).toEqual(mwf);
+  });
+
   it("measures the length after normalizing", async () => {
     const padded = `  ${"a".repeat(256)}  `;
     await expect(

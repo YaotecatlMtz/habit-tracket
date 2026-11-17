@@ -25,6 +25,7 @@ const HabitModel =
   mongoose.models.Habit ?? mongoose.model("Habit", habitSchema);
 
 const MAX_TITLE = 256;
+const MAX_DESCRIPTION = 1000;
 
 function normalize(value: unknown, name: string) {
   if (typeof value !== "string") throw new Error(`${name} must be a string`);
@@ -44,7 +45,14 @@ export async function createHabit(input: {
   if (title.length > MAX_TITLE)
     throw new Error(`Title is longer than ${MAX_TITLE} characters`);
   const description = normalize(input.description ?? "", "Description");
-  validateSchedule(input.schedule ?? ({} as Schedule));
+  if (description.length > MAX_DESCRIPTION)
+    throw new Error(`Description is longer than ${MAX_DESCRIPTION} characters`);
+  const s = input.schedule ?? ({} as Schedule);
+  validateSchedule(s);
+  const schedule: Schedule =
+    s.kind === "perWeek"
+      ? { kind: s.kind, times: s.times }
+      : { kind: s.kind, days: s.days };
 
   return toHabit(
     (
@@ -52,7 +60,7 @@ export async function createHabit(input: {
         userId,
         title,
         description,
-        schedule: input.schedule,
+        schedule,
       })
     ).toObject(),
   );
