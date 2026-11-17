@@ -27,6 +27,7 @@ const HabitModel =
 
 const MAX_TITLE = 256;
 const MAX_DESCRIPTION = 1000;
+const MAX_PAGE_SIZE = 50;
 const OBJECT_ID = /^[0-9a-f]{24}$/i;
 
 function normalize(value: unknown, name: string, spaces = /\s+/g) {
@@ -126,4 +127,27 @@ export async function updateHabit(
     { returnDocument: "after" },
   ).lean();
   return habit && toHabit(habit);
+}
+
+export async function listHabits(
+  userId: string,
+  { after, limit = MAX_PAGE_SIZE }: { after?: string; limit?: number } = {},
+): Promise<{ habits: Habit[]; nextCursor: string | null }> {
+  const owner = requireUserId(userId);
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_PAGE_SIZE)
+    throw new Error(`limit must be an integer from 1 to ${MAX_PAGE_SIZE}`);
+  // Cursor = id of the last habit seen. ObjectIds grow with creation time, so sorting by _id is oldest first.
+  const rows = await HabitModel.find({
+    userId: owner,
+    archivedAt: null, // also matches habits where the field is missing
+    ...(after !== undefined && { _id: { $gt: requireHabitId(after) } }),
+  })
+    .sort({ _id: 1 })
+    .limit(limit + 1) // one extra row tells us whether another page exists
+    .lean();
+  const habits = rows.slice(0, limit).map(toHabit);
+  return {
+    habits,
+    nextCursor: rows.length > limit ? habits[limit - 1].id : null,
+  };
 }

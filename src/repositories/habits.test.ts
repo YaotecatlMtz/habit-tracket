@@ -3,7 +3,13 @@ import { MongoMemoryServer } from "mongodb-memory-server";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { connectDb } from "../lib/db";
 import type { Schedule } from "../domain/schedule";
-import { createHabit, getHabit, updateHabit, type Habit } from "./habits";
+import {
+  createHabit,
+  getHabit,
+  listHabits,
+  updateHabit,
+  type Habit,
+} from "./habits";
 
 let server: MongoMemoryServer;
 
@@ -721,5 +727,145 @@ describe("updateHabit, edge cases", () => {
     const id = await insertRaw({ archivedAt });
     const updated = await updateHabit("u1", id, { title: "Write" });
     expect(updated).toMatchObject({ title: "Write", archivedAt });
+  });
+});
+
+describe("listHabits", () => {
+  const list = async (...args: Parameters<typeof listHabits>) =>
+    (await listHabits(...args)).habits;
+  const ids = (habits: Habit[]) => habits.map((h) => h.id);
+  const insertMany = (n: number) =>
+    Promise.all(
+      Array.from({ length: n }, (_, i) => insertRaw({ title: `H${i}` })),
+    );
+
+  it("returns an empty page for a new user and for a user with only archived habits", async () => {
+    await expect(listHabits("u1")).resolves.toEqual({
+      habits: [],
+      nextCursor: null,
+    });
+    await insertRaw({ archivedAt: new Date() });
+    await expect(listHabits("u1")).resolves.toEqual({
+      habits: [],
+      nextCursor: null,
+    });
+  });
+
+  it("returns every habit in full, oldest first, with both schedule kinds", async () => {
+    const a = await createHabit({ ...valid, title: "A", description: "one" });
+    const b = await createHabit({
+      ...valid,
+      title: "B",
+      schedule: { kind: "perWeek", times: 3 },
+    });
+    const c = await createHabit({ ...valid, title: "C" });
+    expect(await listHabits("u1")).toEqual({
+      habits: [a, b, c],
+      nextCursor: null,
+    });
+  });
+
+  it("returns only the habits of that exact user", async () => {
+    const mine = await createHabit(valid);
+    for (const userId of ["u10", "U1", "u2"])
+      await createHabit({ ...valid, userId });
+    expect(await list("u1")).toEqual([mine]);
+    expect(await list("nobody")).toEqual([]);
+  });
+
+  it("leaves out archived habits and keeps archivedAt: null as active", async () => {
+    const active = await insertRaw({ title: "Active" });
+    await insertRaw({ title: "Archived", archivedAt: new Date() });
+    const restored = await insertRaw({ title: "Null", archivedAt: null });
+    expect(ids(await list("u1"))).toEqual([active, restored]);
+  });
+
+  it("returns description '' for a habit stored without one", async () => {
+    await insertRaw({ description: undefined });
+    expect((await list("u1"))[0].description).toBe("");
+  });
+
+  it("trims the userId", async () => {
+    const created = await createHabit(valid);
+    expect(await list(" u1 ")).toEqual([created]);
+  });
+
+  it.each([undefined, "", "   ", 123, null])(
+    "rejects userId %j",
+    async (userId) => {
+      await expect(listHabits(userId as never)).rejects.toThrow(/user/i);
+    },
+  );
+
+  describe("pagination", () => {
+    it("walks all pages with the cursor, with no gaps or repeats", async () => {
+      const all = await insertMany(5);
+      const p1 = await listHabits("u1", { limit: 2 });
+      expect(ids(p1.habits)).toEqual(all.slice(0, 2));
+      expect(p1.nextCursor).toBe(all[1]);
+      const p2 = await listHabits("u1", { limit: 2, after: p1.nextCursor! });
+      expect(ids(p2.habits)).toEqual(all.slice(2, 4));
+      expect(p2.nextCursor).toBe(all[3]);
+      const p3 = await listHabits("u1", { limit: 2, after: p2.nextCursor! });
+      expect(ids(p3.habits)).toEqual(all.slice(4));
+      expect(p3.nextCursor).toBeNull();
+    });
+
+    it("has no next cursor when the last page is exactly full", async () => {
+      await insertMany(4);
+      const page = await listHabits("u1", { limit: 4 });
+      expect(page.habits).toHaveLength(4);
+      expect(page.nextCursor).toBeNull();
+    });
+
+    it("pages by 50 by default and never returns more", async () => {
+      const all = await insertMany(51);
+      const first = await listHabits("u1");
+      expect(ids(first.habits)).toEqual(all.slice(0, 50));
+      expect(first.nextCursor).toBe(all[49]);
+      const second = await listHabits("u1", { after: first.nextCursor! });
+      expect(ids(second.habits)).toEqual([all[50]]);
+      expect(second.nextCursor).toBeNull();
+    });
+
+    it("accepts limits 1 and 50", async () => {
+      await insertMany(2);
+      await expect(listHabits("u1", { limit: 1 })).resolves.toBeDefined();
+      await expect(listHabits("u1", { limit: 50 })).resolves.toBeDefined();
+    });
+
+    it.each([0, -1, 1.5, 51, NaN, "5", null])(
+      "rejects limit %j",
+      async (limit) => {
+        await expect(
+          listHabits("u1", { limit: limit as never }),
+        ).rejects.toThrow(/limit/i);
+      },
+    );
+
+    it.each(["abc", "", 123, null])("rejects cursor %j", async (after) => {
+      await expect(listHabits("u1", { after: after as never })).rejects.toThrow(
+        /invalid habit id/i,
+      );
+    });
+
+    it("still continues when the habit in the cursor was archived", async () => {
+      const [a, b, c] = await insertMany(3);
+      await mongoose.connection
+        .collection("habits")
+        .updateOne(
+          { _id: new mongoose.Types.ObjectId(b) },
+          { $set: { archivedAt: new Date() } },
+        );
+      expect(ids(await list("u1", { after: b }))).toEqual([c]);
+      expect(ids(await list("u1"))).toEqual([a, c]);
+    });
+
+    it("does not show another user's habits through a cursor", async () => {
+      const theirs = await insertRaw({ userId: "u2" });
+      const mine = await insertRaw({});
+      expect(ids(await list("u1", { after: theirs }))).toEqual([mine]);
+      expect(ids(await list("u2", { after: mine }))).toEqual([]);
+    });
   });
 });
