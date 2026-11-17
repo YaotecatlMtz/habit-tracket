@@ -3,7 +3,7 @@ import { MongoMemoryServer } from "mongodb-memory-server";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { connectDb } from "../lib/db";
 import type { Schedule } from "../domain/schedule";
-import { createHabit, getHabit, type Habit } from "./habits";
+import { createHabit, getHabit, updateHabit, type Habit } from "./habits";
 
 let server: MongoMemoryServer;
 
@@ -385,5 +385,341 @@ describe("getHabit, edge cases", () => {
   it("returns description '' for a habit stored without one", async () => {
     const id = await insertRaw({ description: undefined });
     expect((await getHabit("u1", id))?.description).toBe("");
+  });
+});
+
+describe("updateHabit, main scenarios", () => {
+  const make = (extra = {}) =>
+    createHabit({ ...valid, description: "20 pages", ...extra });
+
+  it("changes only the title and keeps the other fields", async () => {
+    const created = await make();
+    const updated = await updateHabit("u1", created.id, { title: "Write" });
+    expect(updated).toEqual({ ...created, title: "Write" });
+  });
+
+  it("changes only the description", async () => {
+    const created = await make();
+    const updated = await updateHabit("u1", created.id, { description: "10" });
+    expect(updated).toEqual({ ...created, description: "10" });
+  });
+
+  it("changes only the schedule", async () => {
+    const created = await make();
+    const schedule: Schedule = { kind: "perWeek", times: 2 };
+    const updated = await updateHabit("u1", created.id, { schedule });
+    expect(updated).toEqual({ ...created, schedule });
+  });
+
+  it("changes several fields at once", async () => {
+    const created = await make();
+    const patch = {
+      title: "Run",
+      description: "5 km",
+      schedule: { kind: "perWeek", times: 4 },
+    } as const;
+    expect(await updateHabit("u1", created.id, patch)).toEqual({
+      ...created,
+      ...patch,
+    });
+  });
+
+  it("saves the change: getHabit returns what updateHabit returned", async () => {
+    const created = await make();
+    const updated = await updateHabit("u1", created.id, { title: "Write" });
+    expect(await getHabit("u1", created.id)).toEqual(updated);
+  });
+
+  it("keeps id, userId and createdAt", async () => {
+    const created = await make();
+    const updated = await updateHabit("u1", created.id, { title: "Write" });
+    expect(updated).toMatchObject({
+      id: created.id,
+      userId: "u1",
+      createdAt: created.createdAt,
+    });
+  });
+
+  it("returns the habit unchanged for an empty patch", async () => {
+    const created = await make();
+    expect(await updateHabit("u1", created.id, {})).toEqual(created);
+  });
+
+  it("does not touch other habits", async () => {
+    const other = await make({ title: "Other" });
+    const target = await make();
+    await updateHabit("u1", target.id, { title: "Write" });
+    expect(await getHabit("u1", other.id)).toEqual(other);
+  });
+});
+
+describe("updateHabit, title rules", () => {
+  const upd = async (title: unknown) => {
+    const { id } = await createHabit(valid);
+    return updateHabit("u1", id, { title: title as string });
+  };
+
+  it("trims and collapses spaces", async () => {
+    expect((await upd("  Read   a\t\n book "))?.title).toBe("Read a book");
+  });
+
+  it("keeps accents and emoji", async () => {
+    expect((await upd("Meditación 🧘"))?.title).toBe("Meditación 🧘");
+  });
+
+  it("accepts 256 characters, rejects 257", async () => {
+    await expect(upd("a".repeat(256))).resolves.toBeDefined();
+    await expect(upd("a".repeat(257))).rejects.toThrow(/256/);
+  });
+
+  it("counts emoji as one character", async () => {
+    await expect(upd("🧘".repeat(256))).resolves.toBeDefined();
+    await expect(upd("🧘".repeat(257))).rejects.toThrow(/256/);
+  });
+
+  it("measures the length after normalizing", async () => {
+    await expect(upd(`  ${"a".repeat(256)}  `)).resolves.toBeDefined();
+  });
+
+  it.each(["", "   ", 123, null, {}])(
+    "rejects title %j and changes nothing",
+    async (title) => {
+      const created = await createHabit(valid);
+      await expect(
+        updateHabit("u1", created.id, { title: title as never }),
+      ).rejects.toThrow(/title/i);
+      expect(await getHabit("u1", created.id)).toEqual(created);
+    },
+  );
+
+  it("treats title undefined as not provided", async () => {
+    const created = await createHabit(valid);
+    const updated = await updateHabit("u1", created.id, {
+      title: undefined,
+      description: "x",
+    });
+    expect(updated?.title).toBe("Read");
+  });
+});
+
+describe("updateHabit, description rules", () => {
+  const upd = async (description: unknown, extra = {}) => {
+    const { id } = await createHabit({ ...valid, ...extra });
+    return updateHabit("u1", id, { description: description as string });
+  };
+
+  it("collapses spaces but keeps line breaks", async () => {
+    expect((await upd("  a   b\n\nc  "))?.description).toBe("a b\n\nc");
+  });
+
+  it("accepts 1000 characters, rejects 1001", async () => {
+    await expect(upd("a".repeat(1000))).resolves.toBeDefined();
+    await expect(upd("a".repeat(1001))).rejects.toThrow(/1000/);
+  });
+
+  it("counts emoji as one character", async () => {
+    await expect(upd("🧘".repeat(1000))).resolves.toBeDefined();
+    await expect(upd("🧘".repeat(1001))).rejects.toThrow(/1000/);
+  });
+
+  it.each(["", "   "])("clears the description with %j", async (value) => {
+    expect((await upd(value, { description: "old" }))?.description).toBe("");
+  });
+
+  it.each([123, null, {}])(
+    "rejects description %j and changes nothing",
+    async (description) => {
+      const created = await createHabit({ ...valid, description: "old" });
+      await expect(
+        updateHabit("u1", created.id, { description: description as never }),
+      ).rejects.toThrow(/description/i);
+      expect(await getHabit("u1", created.id)).toEqual(created);
+    },
+  );
+});
+
+describe("updateHabit, schedule rules", () => {
+  it.each([
+    { kind: "weekdays", days: [] },
+    { kind: "weekdays", days: [7] },
+    { kind: "perWeek", times: 0 },
+    { kind: "perWeek", times: 8 },
+    { kind: "perWeek", times: 2.5 },
+    { kind: "nope" },
+    null,
+  ])("rejects schedule %j and changes nothing", async (schedule) => {
+    const created = await createHabit(valid);
+    await expect(
+      updateHabit("u1", created.id, { schedule: schedule as never }),
+    ).rejects.toThrow();
+    expect(await getHabit("u1", created.id)).toEqual(created);
+  });
+
+  it("drops extra keys", async () => {
+    const created = await createHabit(valid);
+    const updated = await updateHabit("u1", created.id, {
+      schedule: { kind: "perWeek", times: 3, days: [1], junk: "x" } as never,
+    });
+    expect(updated?.schedule).toEqual({ kind: "perWeek", times: 3 });
+  });
+
+  it("removes duplicate days and sorts them", async () => {
+    const created = await createHabit(valid);
+    const updated = await updateHabit("u1", created.id, {
+      schedule: { kind: "weekdays", days: [5, 1, 5, 3, 1] },
+    });
+    expect(updated?.schedule).toEqual(mwf);
+  });
+
+  it("leaves no keys of the old kind when switching, both ways", async () => {
+    const created = await createHabit(valid);
+    const perWeek: Schedule = { kind: "perWeek", times: 2 };
+    await updateHabit("u1", created.id, { schedule: perWeek });
+    expect((await getHabit("u1", created.id))?.schedule).toStrictEqual(perWeek);
+    await updateHabit("u1", created.id, { schedule: mwf });
+    expect((await getHabit("u1", created.id))?.schedule).toStrictEqual(mwf);
+  });
+
+  it("accepts the schedule limits", async () => {
+    const created = await createHabit(valid);
+    for (const schedule of [
+      { kind: "perWeek", times: 1 },
+      { kind: "perWeek", times: 7 },
+      { kind: "weekdays", days: [0, 6] },
+    ] as Schedule[]) {
+      await expect(
+        updateHabit("u1", created.id, { schedule }),
+      ).resolves.toBeDefined();
+    }
+  });
+});
+
+describe("updateHabit, rainy day scenarios", () => {
+  const unknownId = () => new mongoose.Types.ObjectId().toString();
+
+  it("returns null for a well-formed id that does not exist", async () => {
+    await expect(
+      updateHabit("u1", unknownId(), { title: "x" }),
+    ).resolves.toBeNull();
+  });
+
+  it("returns null for another user's habit and changes nothing", async () => {
+    const created = await createHabit(valid);
+    await expect(
+      updateHabit("u2", created.id, { title: "Hacked" }),
+    ).resolves.toBeNull();
+    expect(await getHabit("u1", created.id)).toEqual(created);
+  });
+
+  it.each([
+    "abc",
+    "",
+    "123",
+    "z".repeat(24),
+    "abcdefghijkl",
+    " 0123456789abcdef01234567 ",
+  ])("throws for the malformed id %j", async (id) => {
+    await expect(updateHabit("u1", id, { title: "x" })).rejects.toThrow(
+      /invalid habit id/i,
+    );
+  });
+
+  it.each([undefined, null, 123, {}])(
+    "throws for the non-string id %j",
+    async (id) => {
+      await expect(
+        updateHabit("u1", id as never, { title: "x" }),
+      ).rejects.toThrow(/invalid habit id/i);
+    },
+  );
+
+  it.each([undefined, "", "   ", 123])("rejects userId %j", async (userId) => {
+    const created = await createHabit(valid);
+    await expect(
+      updateHabit(userId as never, created.id, { title: "x" }),
+    ).rejects.toThrow(/user/i);
+    expect(await getHabit("u1", created.id)).toEqual(created);
+  });
+
+  it("changes nothing when one field of the patch is invalid", async () => {
+    const created = await createHabit(valid);
+    await expect(
+      updateHabit("u1", created.id, {
+        title: "Valid",
+        description: "a".repeat(1001),
+      }),
+    ).rejects.toThrow();
+    expect(await getHabit("u1", created.id)).toEqual(created);
+  });
+});
+
+describe("updateHabit, edge cases", () => {
+  it("ignores userId, _id, createdAt and archivedAt in the patch", async () => {
+    const created = await createHabit(valid);
+    const updated = await updateHabit("u1", created.id, {
+      title: "Write",
+      userId: "u2",
+      _id: "x",
+      createdAt: new Date(0),
+      archivedAt: new Date(),
+    } as never);
+    expect(updated).toEqual({ ...created, title: "Write" });
+    expect(await getHabit("u1", created.id)).toEqual(updated);
+    expect(await getHabit("u2", created.id)).toBeNull();
+  });
+
+  it("accepts the id in uppercase", async () => {
+    const created = await createHabit(valid);
+    const updated = await updateHabit("u1", created.id.toUpperCase(), {
+      title: "Write",
+    });
+    expect(updated?.id).toBe(created.id);
+  });
+
+  it("does not change its input", async () => {
+    const created = await createHabit(valid);
+    const patch = {
+      title: "  Read   a  book ",
+      schedule: { kind: "weekdays", days: [3, 1, 1] } as Schedule,
+    };
+    const copy = structuredClone(patch);
+    await updateHabit("u1", created.id, patch);
+    expect(patch).toEqual(copy);
+  });
+
+  it("returns a plain object with createdAt as a Date", async () => {
+    const created = await createHabit(valid);
+    const updated = await updateHabit("u1", created.id, { title: "Write" });
+    expect(Object.getPrototypeOf(updated)).toBe(Object.prototype);
+    expect(updated).not.toHaveProperty("save");
+    expect(updated?.createdAt).toBeInstanceOf(Date);
+  });
+
+  it("keeps both changes when two updates touch different fields at once", async () => {
+    const created = await createHabit(valid);
+    await Promise.all([
+      updateHabit("u1", created.id, { title: "Write" }),
+      updateHabit("u1", created.id, { description: "10 min" }),
+    ]);
+    expect(await getHabit("u1", created.id)).toMatchObject({
+      title: "Write",
+      description: "10 min",
+    });
+  });
+
+  it("lets the last write win when two updates touch the same field", async () => {
+    const created = await createHabit(valid);
+    await Promise.all([
+      updateHabit("u1", created.id, { title: "A" }),
+      updateHabit("u1", created.id, { title: "B" }),
+    ]);
+    expect(["A", "B"]).toContain((await getHabit("u1", created.id))?.title);
+  });
+
+  it("updates an archived habit and keeps archivedAt", async () => {
+    const archivedAt = new Date("2026-11-05T10:00:00Z");
+    const id = await insertRaw({ archivedAt });
+    const updated = await updateHabit("u1", id, { title: "Write" });
+    expect(updated).toMatchObject({ title: "Write", archivedAt });
   });
 });
