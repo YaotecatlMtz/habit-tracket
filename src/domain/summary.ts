@@ -2,7 +2,13 @@ import { addDays, type Day } from "./dates";
 import { isDue, validateSchedule, type Schedule } from "./schedule";
 
 export type DayMark = { day: Day; done: boolean };
-export type HabitSchedule = { id: string; schedule: Schedule };
+// from: day the habit was created; to: day it was archived (not due from then on).
+export type HabitSchedule = {
+  id: string;
+  schedule: Schedule;
+  from?: Day;
+  to?: Day;
+};
 export type Completion = { habitId: string; day: Day };
 export type DaySummary = { day: Day; due: number; done: number };
 
@@ -26,8 +32,12 @@ export function monthSummary(
   if (new Set(habits.map((h: HabitSchedule) => h.id)).size !== habits.length) {
     throw Error("Duplicate habit id");
   }
-  habits.forEach((h: HabitSchedule) => validateSchedule(h.schedule));
-  completions.forEach((c: Completion) => addDays(c.day, 0)); // validates the day
+  habits.forEach((h: HabitSchedule) => {
+    validateSchedule(h.schedule);
+    if (h.from) addDays(h.from, 0);
+    if (h.to) addDays(h.to, 0);
+  });
+  completions.forEach((c: Completion) => addDays(c.day, 0));
   const done = new Set(
     completions.map((c: Completion) => `${c.habitId}|${c.day}`),
   );
@@ -37,7 +47,12 @@ export function monthSummary(
     day.slice(0, 7) === month;
     day = addDays(day, 1)
   ) {
-    const due = habits.filter((h: HabitSchedule) => isDue(h.schedule, day));
+    const due = habits.filter(
+      (h: HabitSchedule) =>
+        (!h.from || h.from <= day) &&
+        (!h.to || day < h.to) &&
+        isDue(h.schedule, day),
+    );
     result.push({
       day,
       due: due.length,

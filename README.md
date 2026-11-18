@@ -2,6 +2,12 @@
 
 A TDD practice project with Next.js, React, TypeScript and MongoDB (via Mongoose). You create habits that are due on chosen weekdays or N times per week, check them off each day, and see them on a monthly calendar and on cards with the last week. Autumn theme (orange, brown, beige).
 
+## Status
+
+- **Phase 1 (domain): done.** Dates, schedules, streaks and summaries, all unit-tested in `src/domain/`.
+- **Phase 2 (data): in progress.** `createHabit` and `getHabit` work against Mongo (`src/repositories/habits.ts`). Next: `updateHabit`, `listHabits`, then completions.
+- **Phases 3–6 (server actions, UI, end-to-end, users): not started.** There is no `src/app` yet, so the app doesn't run.
+
 ## Commands
 
 ```bash
@@ -11,6 +17,7 @@ npm run dev                  # http://localhost:3000
 
 npm test                     # all Vitest tests, once
 npm run test:watch           # Vitest in watch mode: keep this open while you do TDD
+npx vitest run --coverage    # tests plus a coverage report
 npm run e2e                  # Playwright (starts the dev server for you)
 ```
 
@@ -19,11 +26,11 @@ npm run e2e                  # Playwright (starts the dev server for you)
 | Layer | File pattern | Runs in | Sample |
 |---|---|---|---|
 | Domain logic (pure functions) | `src/**/*.test.ts` | Node | `src/domain/dates.test.ts` |
-| Repositories (Mongo) | `src/**/*.test.ts` | Node + in-memory Mongo | none yet |
+| Repositories (Mongo) | `src/**/*.test.ts` | Node + in-memory Mongo | `src/repositories/habits.test.ts` |
 | Components | `src/**/*.test.tsx` | jsdom + React Testing Library | none yet |
 | End-to-end | `e2e/*.spec.ts` | Real browser | none yet |
 
-`.ts` vs `.tsx` decides the environment (see `vitest.config.mts`). Each test sits next to its source: `streaks.ts` + `streaks.test.ts`.
+`.ts` vs `.tsx` decides the environment (see `vitest.config.mts`). Each test sits next to its source: `streak.ts` + `streak.test.ts`.
 Mongoose models use one shared connection. The app calls `await connectDb()` from `src/lib/db.ts` before querying; tests point `MONGODB_URI` at the in-memory server first.
 Define models as `mongoose.models.Habit ?? mongoose.model("Habit", schema)`, or Next.js hot reload throws "Cannot overwrite model once compiled".
 
@@ -40,10 +47,10 @@ src/
 ├── domain/                   Phase 1: pure functions
 │   ├── dates.ts              toDayKey, weekday, addDays, weekStart (plain functions; a day is a `"YYYY-MM-DD"` string, `toDayKey` is the only one that takes a `Date`)
 │   ├── schedule.ts           isDue, validateSchedule
-│   ├── streaks.ts            currentStreak, longestStreak
+│   ├── streak.ts             currentStreak, longestStreak
 │   └── summary.ts            lastWeek (card), monthSummary (calendar)
 ├── repositories/             Phase 2: one Mongoose model + its queries per file
-│   ├── habits.ts
+│   ├── habits.ts             createHabit, getHabit (done); updateHabit, listHabits
 │   ├── completions.ts
 │   └── users.ts              Phase 6
 ├── components/               Phase 4
@@ -65,11 +72,12 @@ src/
 
 ### Data model
 
-- `Habit`: `userId`, `title`, `description`, `schedule`, `archivedAt?`. The schedule is stored inside the habit:
+- `Habit`: `userId`, `title`, `description`, `schedule`, `createdAt`, `archivedAt?`. The schedule is stored inside the habit:
   ```ts
   type Schedule = { kind: "weekdays"; days: number[] }   // 0 = Sunday … 6 = Saturday
                 | { kind: "perWeek"; times: number };    // e.g. 3 times, any days
   ```
+  `createHabit` rules: `userId` and `title` are required. The title can be up to 256 characters and the description up to 1000, counted after trimming. In the title, all runs of whitespace collapse to one space. The description keeps its line breaks. The schedule must pass `validateSchedule`. Only its known keys are stored, and weekdays are de-duplicated and sorted. `getHabit(userId, id)` returns only the owner's habit. It returns `null` if the habit is missing and throws on a malformed id.
 - `Completion`: `{ habitId, day: "YYYY-MM-DD" }`, unique on `{ habitId, day }`.
 - `User` (Phase 6): `firstName`, `paternalSurname`, `maternalSurname`, `email` (unique), `passwordHash`, `birthDate`, `timeZone`.
 
@@ -80,7 +88,7 @@ A day is always a `"YYYY-MM-DD"` key in the user's time zone, never a raw `Date`
 Red → green → refactor. Write one failing test, make it pass with the simplest code, clean up, and repeat. Work from the inside out.
 
 ### Phase 1: Domain (`src/domain/`, unit tests)
-Done so far: steps 1–4, in `dates.ts` and `schedule.ts`. Day helpers take and return `"YYYY-MM-DD"` strings and reject anything that is not a real date; `toDayKey(instant, timeZone)` is the only function that takes a `Date`.
+Done: steps 1–9, in `dates.ts`, `schedule.ts`, `streak.ts` and `summary.ts`. Day helpers take and return `"YYYY-MM-DD"` strings and reject anything that is not a real date; `toDayKey(instant, timeZone)` is the only function that takes a `Date`.
 
 1. `toDayKey(instant, timeZone)`: 21:00 on 5 Nov in `America/Mexico_City` is `"2026-11-05"`, not the UTC day.
 2. `addDays(day, n)` across month and year boundaries; `weekday(day)` (0 = Sunday); `weekStart(day)` returns the Monday.
@@ -93,6 +101,8 @@ Done so far: steps 1–4, in `dates.ts` and `schedule.ts`. Day helpers take and 
 9. `monthSummary(habits, completions, month)`: for each day, how many habits were due and how many were done, for the calendar.
 
 ### Phase 2: Data (`src/repositories/`, in-memory Mongo)
+In progress: `createHabit` and `getHabit` from step 10 are done.
+
 10. `createHabit`, `updateHabit`, `getHabit`, `listHabits(userId)`, with validation (title required, schedule passes `validateSchedule`).
 11. `toggleCompletion(habitId, day)`: the first call adds a completion, the second removes it.
 12. Unique index on `{ habitId, day }`: two simultaneous toggles never create duplicates.
