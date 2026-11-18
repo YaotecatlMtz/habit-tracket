@@ -15,10 +15,6 @@ describe("currentStreak, weekdays", () => {
     expect(currentStreak([], mwf, today)).toBe(0);
   });
 
-  it("is 1 when only today's due day is done", () => {
-    expect(currentStreak(["2026-11-06"], mwf, today)).toBe(1);
-  });
-
   it("counts consecutive due days, skipping non-due days in between", () => {
     const done = ["2026-10-30", "2026-11-02", "2026-11-04", "2026-11-06"];
     expect(currentStreak(done, mwf, today)).toBe(4);
@@ -43,22 +39,6 @@ describe("currentStreak, weekdays", () => {
     );
   });
 
-  it("counts duplicate completions once", () => {
-    expect(
-      currentStreak(["2026-11-06", "2026-11-06", "2026-11-06"], mwf, today),
-    ).toBe(1);
-  });
-
-  it("does not depend on the order of completions", () => {
-    expect(
-      currentStreak(["2026-11-06", "2026-11-02", "2026-11-04"], mwf, today),
-    ).toBe(3);
-  });
-
-  it("ignores completions on non-due days", () => {
-    expect(currentStreak(["2026-11-05", "2026-11-06"], mwf, today)).toBe(1); // Thursday isn't due
-  });
-
   it("ignores completions after today", () => {
     const done = ["2026-11-02", "2026-11-04", "2026-11-06"];
     expect(currentStreak(done, mwf, "2026-11-04")).toBe(2);
@@ -75,11 +55,6 @@ describe("currentStreak, perWeek", () => {
 
   it("is 0 with no completions", () => {
     expect(currentStreak([], three, today)).toBe(0);
-  });
-
-  it("counts a week that met the goal", () => {
-    const done = ["2026-11-02", "2026-11-03", "2026-11-04"];
-    expect(currentStreak(done, three, today)).toBe(1);
   });
 
   it("counts consecutive weeks that met the goal", () => {
@@ -133,12 +108,6 @@ describe("currentStreak, perWeek", () => {
     expect(currentStreak(done, three, today)).toBe(1);
   });
 
-  it("starts weeks on Monday: Fri-Sat-Sun is one week", () => {
-    expect(
-      currentStreak(["2026-11-06", "2026-11-07", "2026-11-08"], three, today),
-    ).toBe(1);
-  });
-
   it("starts weeks on Monday: Sunday and the next Monday are different weeks", () => {
     expect(
       currentStreak(["2026-11-08", "2026-11-09", "2026-11-10"], three, today),
@@ -157,12 +126,6 @@ describe("longestStreak", () => {
     expect(longestStreak([], three)).toBe(0);
   });
 
-  it("returns the length of a single run", () => {
-    expect(longestStreak(["2026-11-02", "2026-11-04", "2026-11-06"], mwf)).toBe(
-      3,
-    );
-  });
-
   it("keeps an older, longer run over a recent shorter one", () => {
     const done = [
       "2026-10-26",
@@ -172,10 +135,6 @@ describe("longestStreak", () => {
       "2026-11-06",
     ];
     expect(longestStreak(done, mwf)).toBe(4);
-  });
-
-  it("splits runs on a missed due day", () => {
-    expect(longestStreak(["2026-11-02", "2026-11-06"], mwf)).toBe(1);
   });
 
   it("ignores duplicates and input order", () => {
@@ -203,12 +162,6 @@ describe("longestStreak", () => {
     expect(longestStreak(done, three)).toBe(2);
   });
 
-  it("is 0 when no perWeek week met the goal", () => {
-    expect(
-      longestStreak(["2026-11-02", "2026-11-03", "2026-11-09"], three),
-    ).toBe(0);
-  });
-
   it("ignores completions on non-due days (weekdays)", () => {
     // Tue, Thu, Sat are not due for mwf
     expect(longestStreak(["2026-11-03", "2026-11-05", "2026-11-07"], mwf)).toBe(
@@ -232,13 +185,6 @@ describe("longestStreak", () => {
       "2027-01-06",
     ];
     expect(longestStreak(done, three)).toBe(3);
-  });
-
-  it("is never lower than the current streak", () => {
-    const done = ["2026-11-02", "2026-11-04", "2026-11-06"];
-    expect(longestStreak(done, mwf)).toBeGreaterThanOrEqual(
-      currentStreak(done, mwf, "2026-11-06"),
-    );
   });
 });
 

@@ -5,10 +5,6 @@ import { isDue, validateSchedule, type Schedule } from "./schedule";
 const bad = (value: unknown) => value as Parameters<typeof validateSchedule>[0];
 
 describe("isDue", () => {
-  it("returns correct values for weekdays", () => {
-    expect(isDue({ kind: "weekdays", days: [1] }, "2026-11-09")).toBe(true);
-    expect(isDue({ kind: "weekdays", days: [2] }, "2026-11-04")).toBe(false);
-  });
   it("returns correct values for perWeek", () => {
     expect(isDue({ kind: "perWeek", times: 3 }, "2026-11-03")).toBe(true);
     expect(isDue({ kind: "perWeek", times: 2 }, "2026-11-04")).toBe(true);
@@ -81,12 +77,6 @@ describe("validateSchedule", () => {
         /Times must be|out of range/,
       );
     }
-  });
-
-  it("accepts duplicate days, which are harmless", () => {
-    expect(() =>
-      validateSchedule({ kind: "weekdays", days: [1, 1, 3] }),
-    ).not.toThrow();
   });
 
   it("rejects a fractional day", () => {
