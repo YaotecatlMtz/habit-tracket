@@ -79,12 +79,9 @@ describe("lastWeek, calendar boundaries", () => {
 });
 
 describe("lastWeek, invalid input", () => {
-  it.each(["garbage"])(
-    "throws for invalid today %j",
-    (bad: string) => {
-      expect(() => lastWeek([], bad)).toThrow();
-    },
-  );
+  it("throws for an invalid today", () => {
+    expect(() => lastWeek([], "garbage")).toThrow();
+  });
 
   it("throws for an invalid day inside completions", () => {
     expect(() => lastWeek(["2026-11-03", "2026-02-30"], today)).toThrow();

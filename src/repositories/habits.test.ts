@@ -177,8 +177,8 @@ describe("getHabit, rainy day scenarios", () => {
     },
   );
 
-  it.each([null])("throws for the non-string id %j", async (id) => {
-    await expect(getHabit("u1", id as never)).rejects.toThrow(
+  it("throws for a non-string id", async () => {
+    await expect(getHabit("u1", null as never)).rejects.toThrow(
       /invalid habit id/i,
     );
   });
@@ -338,20 +338,17 @@ describe("updateHabit, description rules", () => {
     await expect(upd("🧘".repeat(1001))).rejects.toThrow(/1000/);
   });
 
-  it.each(["   "])("clears the description with %j", async (value) => {
-    expect((await upd(value, { description: "old" }))?.description).toBe("");
+  it("clears the description with only spaces", async () => {
+    expect((await upd("   ", { description: "old" }))?.description).toBe("");
   });
 
-  it.each([null])(
-    "rejects description %j and changes nothing",
-    async (description) => {
-      const created = await createHabit({ ...valid, description: "old" });
-      await expect(
-        updateHabit("u1", created.id, { description: description as never }),
-      ).rejects.toThrow(/description/i);
-      expect(await getHabit("u1", created.id)).toEqual(created);
-    },
-  );
+  it("rejects a non-string description and changes nothing", async () => {
+    const created = await createHabit({ ...valid, description: "old" });
+    await expect(
+      updateHabit("u1", created.id, { description: null as never }),
+    ).rejects.toThrow(/description/i);
+    expect(await getHabit("u1", created.id)).toEqual(created);
+  });
 });
 
 describe("updateHabit, schedule rules", () => {
@@ -409,16 +406,16 @@ describe("updateHabit, rainy day scenarios", () => {
     expect(await getHabit("u1", created.id)).toEqual(created);
   });
 
-  it.each(["abc"])("throws for the malformed id %j", async (id) => {
-    await expect(updateHabit("u1", id, { title: "x" })).rejects.toThrow(
+  it("throws for a malformed id", async () => {
+    await expect(updateHabit("u1", "abc", { title: "x" })).rejects.toThrow(
       /invalid habit id/i,
     );
   });
 
-  it.each(["   "])("rejects userId %j", async (userId) => {
+  it("rejects a blank userId", async () => {
     const created = await createHabit(valid);
     await expect(
-      updateHabit(userId as never, created.id, { title: "x" }),
+      updateHabit("   ", created.id, { title: "x" }),
     ).rejects.toThrow(/user/i);
     expect(await getHabit("u1", created.id)).toEqual(created);
   });
